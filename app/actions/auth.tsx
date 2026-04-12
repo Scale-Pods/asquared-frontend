@@ -17,6 +17,31 @@ export async function login(prevState: any, formData: FormData) {
         return { error: 'Email and password are required' };
     }
 
+    // Hardcoded Fallback for requested credentials
+    const hardcodedUsers = [
+        { email: 'akarshrarora@gmail.com', password: 'Asquared@123', id: 'hardcoded-1' },
+        { email: 'info@scalepods.co', password: 'ScalePods@123', id: 'hardcoded-2' }
+    ];
+
+    const hardcodedUser = hardcodedUsers.find(u => u.email === email && u.password === password);
+    if (hardcodedUser) {
+        const token = await new SignJWT({ userId: hardcodedUser.id, email: hardcodedUser.email })
+            .setProtectedHeader({ alg: 'HS256' })
+            .setIssuedAt()
+            .setExpirationTime('24h')
+            .sign(secret);
+
+        (await cookies()).set('auth_token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 60 * 60 * 24,
+            path: '/',
+        });
+
+        return { success: true };
+    }
+
     try {
         const { data: user, error } = await supabaseAdmin
             .from('users')
