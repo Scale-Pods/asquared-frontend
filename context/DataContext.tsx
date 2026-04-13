@@ -11,10 +11,10 @@ interface DataContextType {
     loadingCalls: boolean;
     loadingBalances: boolean;
     voiceBalance: any;
-    twilioBalance: any;
+    didlogicBalance: any;
     error: string | null;
     refreshLeads: () => Promise<void>;
-    refreshCalls: () => Promise<void>;
+    refreshCalls: (params?: Record<string, string>) => Promise<void>;
     refreshBalances: () => Promise<void>;
     refreshAll: () => Promise<void>;
 }
@@ -28,8 +28,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const [loadingCalls, setLoadingCalls] = useState(true);
     const [loadingBalances, setLoadingBalances] = useState(true);
     const [voiceBalance, setVoiceBalance] = useState<any>(null);
-
-    const [twilioBalance, setTwilioBalance] = useState<any>(null);
+    const [didlogicBalance, setDidlogicBalance] = useState<any>(null);
     const [error, setError] = useState<string | null>(null);
 
     const fetchLeads = useCallback(async () => {
@@ -48,10 +47,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         }
     }, []);
 
-    const fetchCalls = useCallback(async () => {
-        setLoadingCalls(prev => prev || true); // Only show loading if not already loading
+    const fetchCalls = useCallback(async (params?: Record<string, string>) => {
+        setLoadingCalls(true);
         try {
-            const response = await fetch('/api/calls');
+            const query = params ? '?' + new URLSearchParams(params).toString() : '';
+            const response = await fetch('/api/calls' + query);
             if (response.ok) {
                 const data = await response.json();
                 if (Array.isArray(data)) setCalls(data);
@@ -63,21 +63,26 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         }
     }, []);
 
-    const fetchBalances = useCallback(async () => {
+    const refreshBalances = useCallback(async () => {
+        setLoadingBalances(true);
         try {
-            const [vapiRes, twilioRes] = await Promise.all([
-                fetch('/api/vapi/balance'),
-                fetch('/api/twilio/balance')
+            const [vRes, dRes] = await Promise.all([
+                fetch('/api/voice/balance'),
+                fetch('/api/didlogic/balance')
             ]);
-            if (vapiRes.ok) setVoiceBalance(await vapiRes.ok ? await vapiRes.json() : null);
-            if (twilioRes.ok) setTwilioBalance(await twilioRes.ok ? await twilioRes.json() : null);
-        } catch (err) { }
-        finally { setLoadingBalances(false); }
+            
+            if (vRes.ok) setVoiceBalance(await vRes.json());
+            if (dRes.ok) setDidlogicBalance(await dRes.json());
+        } catch (error) {
+            console.error('Error refreshing balances:', error);
+        } finally {
+            setLoadingBalances(false);
+        }
     }, []);
 
     const refreshAll = useCallback(async () => {
-        await Promise.all([fetchLeads(), fetchCalls(), fetchBalances()]);
-    }, [fetchLeads, fetchCalls, fetchBalances]);
+        await Promise.all([fetchLeads(), fetchCalls(), refreshBalances()]);
+    }, [fetchLeads, fetchCalls, refreshBalances]);
 
     useEffect(() => {
         refreshAll();
@@ -91,12 +96,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             loadingCalls,
             loadingBalances,
             voiceBalance,
-
-            twilioBalance,
+            didlogicBalance,
             error,
             refreshLeads: fetchLeads,
             refreshCalls: fetchCalls,
-            refreshBalances: fetchBalances,
+            refreshBalances: refreshBalances,
             refreshAll
         }}>
             {children}

@@ -257,18 +257,20 @@ export function consolidateLeads(data: RawLeadsResponse): ConsolidatedLead[] {
     if (Array.isArray((data as any).master_leads)) {
         (data as any).master_leads.forEach((l: any, idx: number) => {
             consolidatedLeads.push({
-                id: `master-${getVal(l, ["id"]) || idx}`,
-                name: String(getVal(l, ["Name", "name"]) || "Lead"),
-                phone: String(getVal(l, ["Phone", "phone", "phoneNumber", "customer_number"]) || ""),
+                id: `master-${getVal(l, ["master_leads_id", "id"]) || idx}`,
+                name: String(getVal(l, ["Owner Name", "Name", "name"]) || "Lead"),
+                phone: String(getVal(l, ["Contact Number", "Phone", "phone", "phoneNumber", "customer_number"]) || ""),
                 email: String(getVal(l, ["Email", "email"]) || "No Email"),
-                replied: "No",
+                replied: String(getVal(l, ["Replied", "replied"]) || "No"),
                 current_loop: "Master",
                 source_loop: "Master Leads",
                 stages_passed: [],
                 stage_data: {},
                 created_at: getVal(l, ["Created At", "created_at"]) || new Date().toISOString(),
                 updated_at: getVal(l, ["Updated At", "updated_at"]),
-                lead_status: getVal(l, ["lead_status", "Lead Status"])
+                lead_status: getVal(l, ["Replied", "replied", "lead_status", "Lead Status"]),
+                voice_call_status: getVal(l, ["voice_call_status", "Voice Call Status"]),
+                note: getVal(l, ["note", "Note"])
             });
         });
     }

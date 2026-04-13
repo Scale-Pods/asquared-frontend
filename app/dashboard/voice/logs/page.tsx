@@ -4,18 +4,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { RefreshCw, Play, ChevronLeft, ChevronRight, User, Loader2, Download, ExternalLink, Search, Info, Activity } from "lucide-react";
+import { RefreshCw, Play, ChevronLeft, ChevronRight, User, Loader2, Download, ExternalLink, Search, Info, Activity, HelpCircle } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { LMLoader } from "@/components/lm-loader";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import React, { useState, useEffect } from "react";
 import { CallDetailsModal } from "@/components/voice/call-details-modal";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { format, parseISO, subDays } from "date-fns";
 import { calculateDuration, formatDuration } from "@/lib/utils";
 import { useData } from "@/context/DataContext";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 // Progressive fetch for missing metadata (phone numbers/direction)
 // Static cells that rely on pre-fetched and normalized data from the API
@@ -37,6 +37,20 @@ const DynamicRowCells = ({ call, leads }: { call: any, leads: any[] }) => {
         }
     }
 
+    // Sentiment & Status logic
+    let voiceStatus = "-";
+    let voiceNote = "";
+    if (call.phone && leads) {
+        const targetPhone = call.phone.replace(/\D/g, '');
+        if (targetPhone && targetPhone.length > 5) {
+            const foundLead = leads.find((l: any) => l.phone && l.phone.replace(/\D/g, '') === targetPhone);
+            if (foundLead) {
+                voiceStatus = foundLead.voice_call_status || "-";
+                voiceNote = foundLead.note || "";
+            }
+        }
+    }
+
     return (
         <>
             <TableCell className="font-semibold text-slate-900">
@@ -52,6 +66,22 @@ const DynamicRowCells = ({ call, leads }: { call: any, leads: any[] }) => {
                 <Badge variant={isInboundState ? "default" : "secondary"} className={`text-[10px] ${isInboundState ? 'bg-blue-600 outline-none border-none' : ''}`}>
                     {realType}
                 </Badge>
+            </TableCell>
+            <TableCell>
+                {voiceNote ? (
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <span className="text-slate-700 font-medium cursor-help underline decoration-dotted decoration-slate-300">
+                                {voiceStatus}
+                            </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[250px] bg-slate-900 text-white border-none p-3 shadow-xl">
+                            <p className="text-xs leading-relaxed">{voiceNote}</p>
+                        </TooltipContent>
+                    </Tooltip>
+                ) : (
+                    <span className="text-slate-400">{voiceStatus}</span>
+                )}
             </TableCell>
             <TableCell className="text-slate-600 font-medium">{formatDuration(call.durationSeconds)}</TableCell>
             <TableCell className="text-slate-500 text-xs">{call.country || 'Unknown'}</TableCell>
@@ -80,7 +110,7 @@ const DynamicRowCells = ({ call, leads }: { call: any, leads: any[] }) => {
                                     <span className="font-mono text-slate-700">${(call.breakdown?.agent || 0).toFixed(3)}</span>
                                 </div>
                                 <div className="flex justify-between text-[11px] text-slate-500">
-                                    <span>Telephony (Provider):</span>
+                                    <span>Didlogic (Carrier):</span>
                                     <span className="font-mono text-slate-700">${(call.breakdown?.telephony || 0).toFixed(3)}</span>
                                 </div>
                             </div>
@@ -98,10 +128,11 @@ const DynamicRowCells = ({ call, leads }: { call: any, leads: any[] }) => {
 
 
 export default function VoiceLogsPage() {
-    const { calls: globalCalls, loadingCalls, refreshAll, leads, loadingLeads } = useData();
+    const { calls: globalCalls, loadingCalls, refreshCalls, leads, loadingLeads } = useData();
     const [allCallsMapped, setAllCallsMapped] = useState<any[]>([]);
     const [calls, setCalls] = useState<any[]>([]);
-    const loading = loadingCalls;
+    const [loadingLocal, setLoadingLocal] = useState(false);
+    const loading = loadingCalls || loadingLocal;
     const [selectedCall, setSelectedCall] = useState<any>(null);
     const [modalOpen, setModalOpen] = useState(false);
     const [dateRange, setDateRange] = useState<any>({
@@ -148,10 +179,27 @@ export default function VoiceLogsPage() {
         setAllCallsMapped(mappedCalls);
     }, [globalCalls, loadingCalls, leads, loadingLeads]);
 
-    // Reset to page 1 ONLY when the user explicitly changes a filter — not when background data enrichment updates allCallsMapped.
+    // SYNC: Fetch real data from Vapi when date range changes
     useEffect(() => {
+        const fetchRealData = async () => {
+            if (!dateRange?.from) return;
+            setLoadingLocal(true);
+            try {
+                const params: Record<string, string> = {
+                    from: dateRange.from.toISOString(),
+                };
+                if (dateRange.to) {
+                    params.to = dateRange.to.toISOString();
+                }
+                await refreshCalls(params);
+            } finally {
+                setLoadingLocal(false);
+            }
+        };
+
+        fetchRealData();
         setCurrentPage(1);
-    }, [dateRange, statusFilter, typeFilter, providerFilter, phoneFilter, sortBy]);
+    }, [dateRange, providerFilter, typeFilter, statusFilter, phoneFilter, sortBy]);
 
     // Re-apply filtering whenever data or filters change (no page reset here).
     useEffect(() => {
@@ -205,7 +253,22 @@ export default function VoiceLogsPage() {
     }, [allCallsMapped, dateRange, statusFilter, typeFilter, providerFilter, phoneFilter, sortBy]);
 
     const handleRefresh = () => {
-        refreshAll();
+        const fetchRealData = async () => {
+            if (!dateRange?.from) return;
+            setLoadingLocal(true);
+            try {
+                const params: Record<string, string> = {
+                    from: dateRange.from.toISOString(),
+                };
+                if (dateRange.to) {
+                    params.to = dateRange.to.toISOString();
+                }
+                await refreshCalls(params);
+            } finally {
+                setLoadingLocal(false);
+            }
+        };
+        fetchRealData();
     };
 
     const handleRowClick = (call: any) => {
@@ -216,7 +279,8 @@ export default function VoiceLogsPage() {
     const paginatedCalls = calls.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
     return (
-        <div className="space-y-6 pb-10 relative min-h-[500px]">
+        <TooltipProvider>
+            <div className="space-y-6 pb-10 relative min-h-[500px]">
             {loading && allCallsMapped.length === 0 && <LMLoader />}
             <div className="flex flex-col gap-4">
                 <div className="flex items-center justify-between">
@@ -225,10 +289,7 @@ export default function VoiceLogsPage() {
                         <p className="text-slate-500">Comprehensive history of Vapi voice calls.</p>
                     </div>
                     <div className="flex items-center gap-3">
-                        <Button variant="outline" className="text-slate-600 border-slate-200" onClick={() => setCostModalOpen(true)}>
-                            <Info className="h-4 w-4 mr-2" />
-                            Cost Info
-                        </Button>
+
                         <DateRangePicker onUpdate={(values) => setDateRange(values.range)} />
                         <Button variant="outline" onClick={handleRefresh} disabled={loading}>
                             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
@@ -291,6 +352,21 @@ export default function VoiceLogsPage() {
                                 <TableHead className="w-[150px]">Name</TableHead>
                                 <TableHead>Guest Number</TableHead>
                                 <TableHead>Type</TableHead>
+                                <TableHead>
+                                    <div className="flex items-center gap-1.5">
+                                        Sentiment & Status
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <button className="text-slate-400 hover:text-slate-600">
+                                                    <HelpCircle className="h-3.5 w-3.5" />
+                                                </button>
+                                            </TooltipTrigger>
+                                            <TooltipContent className="bg-slate-900 text-white border-none p-2 text-[10px] max-w-[200px]">
+                                                From the last contacted time wait for 10 mins to see the sentiment and reload.
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </div>
+                                </TableHead>
                                 <TableHead>Duration</TableHead>
                                 <TableHead>Country</TableHead>
                                 <TableHead>Cost</TableHead>
@@ -300,9 +376,9 @@ export default function VoiceLogsPage() {
                         </TableHeader>
                         <TableBody>
                             {loading && calls.length === 0 ? (
-                                <TableRow><TableCell colSpan={8} className="h-24 text-center">Loading calls...</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={9} className="h-24 text-center">Loading calls...</TableCell></TableRow>
                             ) : calls.length === 0 ? (
-                                <TableRow><TableCell colSpan={8} className="h-24 text-center text-slate-500">No calls matching filters.</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={9} className="h-24 text-center text-slate-500">No calls matching filters.</TableCell></TableRow>
                             ) : (
                                 (paginatedCalls as any[]).map((call) => (
                                     <TableRow
@@ -341,67 +417,7 @@ export default function VoiceLogsPage() {
             </Card>
 
             <CallDetailsModal open={modalOpen} onOpenChange={setModalOpen} call={selectedCall} />
-
-            <Dialog open={costModalOpen} onOpenChange={setCostModalOpen}>
-                <DialogContent className="sm:max-w-[500px] bg-white border-slate-200 shadow-xl overflow-hidden p-0">
-                    <DialogHeader className="p-6 bg-slate-50 border-b border-slate-100">
-                        <DialogTitle className="flex items-center gap-2 text-xl font-bold text-slate-900">
-                            <div className="p-2 rounded-lg bg-blue-100 text-blue-600">
-                                <Info className="h-5 w-5" />
-                            </div>
-                            How Costing is Calculated
-                        </DialogTitle>
-                        <DialogDescription className="text-slate-500">
-                            Understanding our automated billing and rate matching logic.
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <div className="p-6 space-y-6">
-                        <div className="space-y-4">
-                            <div className="flex gap-4">
-                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-500 text-sm">1</div>
-                                <div>
-                                    <h4 className="font-bold text-slate-800 text-sm mb-1">Normalization</h4>
-                                    <p className="text-xs text-slate-500 leading-relaxed">System cleans phone numbers by removing all symbols and spaces, ensuring consistent lookup against our global rate database.</p>
-                                </div>
-                            </div>
-
-                            <div className="flex gap-4">
-                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-500 text-sm">2</div>
-                                <div>
-                                    <h4 className="font-bold text-slate-800 text-sm mb-1">Longest-Prefix Matching</h4>
-                                    <p className="text-xs text-slate-500 leading-relaxed">We use high-precision matching. If a number matches multiple regions (e.g. UAE General vs Dubai Fixed), we prioritize the most specific prefix for maximum accuracy.</p>
-                                </div>
-                            </div>
-
-                            <div className="flex gap-4">
-                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-500 text-sm">3</div>
-                                <div>
-                                    <h4 className="font-bold text-slate-800 text-sm mb-1">Per-Minute Computation</h4>
-                                    <p className="text-xs text-slate-500 leading-relaxed">Duration is tracked in seconds and converted to minutes. For outbound calls, the matched rate is applied. Inbound calls are always computed at $0.02.</p>
-                                </div>
-                            </div>
-
-                            <div className="flex gap-4">
-                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center font-bold text-emerald-600 text-sm">✓</div>
-                                <div>
-                                    <h4 className="font-bold text-emerald-800 text-sm mb-1">Billing Confirmation</h4>
-                                    <p className="text-xs text-emerald-600/80 leading-relaxed italic">All rates are pulled directly from your official billing schedule (found in the PDF below).</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <DialogFooter className="p-6 bg-slate-50 border-t border-slate-100">
-                        <a href="/billing-plan.pdf" download className="w-full">
-                            <Button className="w-full bg-slate-900 hover:bg-slate-800 text-white shadow-lg shadow-slate-200">
-                                <Download className="h-4 w-4 mr-2" />
-                                Download Billing Plan PDF
-                            </Button>
-                        </a>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
         </div>
+        </TooltipProvider>
     );
 }

@@ -29,32 +29,8 @@ function calculateTelephonyCost(durationSecs: number, phoneNumber: string, isInb
     if (isInbound) return durationSecs > 0 ? 0.02 : 0;
     if (!durationSecs || durationSecs <= 0) return 0;
 
-    const pClean = (providerNumber || "").replace(/\D/g, '');
-    const tClean = (phoneNumber || "").replace(/\D/g, '');
-
-    const botIsUS = pClean.startsWith('1');
-    const botIsUK = pClean.startsWith('44');
-    const targetIsUAE = tClean.startsWith('971');
-    const targetIsUS = tClean.startsWith('1');
-    const targetIsUK = tClean.startsWith('44');
-
-    // 🚀 Custom Twilio Partner Rates (Manual Overrides)
-    if (botIsUS || botIsUK) {
-        // US/UK call to UAE
-        if (targetIsUAE) return (durationSecs / 60) * 0.2426;
-
-        // US to US local
-        if (botIsUS && targetIsUS) return (durationSecs / 60) * 0.013;
-
-        // UK to UK local
-        if (botIsUK && targetIsUK) return (durationSecs / 60) * 0.0305;
-
-        // Fallback for Twilio international calls if no specific rule above is matched
-        return (durationSecs / 60) * 0.05;
-    }
-
-    // Default rate lookup from rates.json for other regions/providers
-    const rate = getRateInfo(tClean);
+    // Default rate lookup from rates.json
+    const rate = getRateInfo(phoneNumber);
     return (durationSecs / 60) * (rate?.Rate ?? 0);
 }
 
@@ -171,41 +147,6 @@ export async function GET(req: Request) {
         const toDate = toParam ? new Date(toParam) : null;
 
 
-
-
-
-        // --- 1.2. Twilio Telephony Aggregation ---
-        // Fetch real-time billing data from Twilio (BYOC carrier)
-        const twilioSid = process.env.TWILIO_ACCOUNT_SID;
-        const twilioToken = process.env.TWILIO_AUTH_TOKEN;
-        let twilioLookup: Map<string, any> = new Map();
-
-        try {
-            if (twilioSid && twilioToken) {
-                console.log(`[TwilioSync] Syncing billing for account: ${twilioSid}`);
-                const twRes = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Calls.json?PageSize=100`, {
-                    headers: {
-                        'Authorization': 'Basic ' + Buffer.from(`${twilioSid}:${twilioToken}`).toString('base64'),
-                    }
-                });
-                if (twRes.ok) {
-                    const twData = await twRes.json();
-                    const callArray = twData.calls || [];
-                    console.log(`[TwilioSync] Successfully fetched ${callArray.length} billing records`);
-                    callArray.forEach((c: any) => {
-                        const to = cleanPhoneNumber(c.to);
-                        const from = cleanPhoneNumber(c.from);
-                        const key = `${to}_${from}_${new Date(c.start_time).getTime().toString().substring(0, 7)}`;
-                        twilioLookup.set(key, c);
-                    });
-                } else {
-                    console.error(`[TwilioSync] Failed: ${twRes.status} ${twRes.statusText}`);
-                }
-            }
-        } catch (e) {
-            console.error("Twilio fetch fail:", e);
-        }
-
         // --- 1.5. Vapi Aggregation ---
         let vapiNormalized: any[] = [];
         try {
@@ -214,37 +155,54 @@ export async function GET(req: Request) {
                 let allVapiCalls: any[] = [];
                 let hasMoreVapi = true;
                 let lastCreatedAt = null;
-                const batchSize = 1000;
-
-                // Fetch up to 5000 calls for lifetime view (adjust if needed)
+                const batchSize = 200;
+                const vapiIds = new Set();
+ 
+                // Fetch up to 20,000 calls for a truly complete history (100 batches of 200)
                 let batchedFetched = 0;
-                while (hasMoreVapi && batchedFetched < 5) {
+                while (hasMoreVapi && batchedFetched < 100) { 
                     let vapiListUrl = `https://api.vapi.ai/call?limit=${batchSize}`;
-                    if (lastCreatedAt) {
-                        // Vapi uses createdAtLe for pagination moving backwards
-                        vapiListUrl += `&createdAtLe=${lastCreatedAt}`;
+                    
+                    if (fromDate) {
+                        vapiListUrl += `&createdAtGe=${fromDate.toISOString()}`;
                     }
-
+                    
+                    // Use the cursor (lastCreatedAt) if available, otherwise use toDate
+                    const currentToDate = lastCreatedAt || (toDate ? toDate.toISOString() : new Date().toISOString());
+                    vapiListUrl += `&createdAtLe=${currentToDate}`;
+ 
                     const vapiRes = await fetch(vapiListUrl, {
                         headers: { 'Authorization': `Bearer ${vapiPrivKey}`, 'Content-Type': 'application/json' }
                     });
+ 
+                    if (!vapiRes.ok) {
+                        console.error(`Vapi API error: ${vapiRes.status}`);
+                        break;
+                    }
 
-                    if (!vapiRes.ok) break;
                     const vapiListData = await vapiRes.json();
                     const list = Array.isArray(vapiListData) ? vapiListData : (vapiListData.data || []);
-
+ 
                     if (list.length === 0) break;
+ 
+                    // Filter out duplicates using Set for O(1) lookups
+                    const newList = list.filter((c: any) => {
+                        if (vapiIds.has(c.id)) return false;
+                        vapiIds.add(c.id);
+                        return true;
+                    });
 
-                    // Filter out duplicates if any
-                    const newList = list.filter((c: any) => !allVapiCalls.find((existing: any) => existing.id === c.id));
-                    if (newList.length === 0) break;
-
+                    if (newList.length === 0 && list.length > 0) {
+                        // All items in this batch were duplicates, stop to avoid infinite loop
+                        break;
+                    }
+ 
                     allVapiCalls = [...allVapiCalls, ...newList];
-
-                    // Update cursor: use the createdAt of the last item minus 1ms to get older items
+ 
+                    // Update cursor: use the createdAt of the last item
                     const oldestCall = list[list.length - 1];
                     lastCreatedAt = oldestCall.createdAt;
-
+ 
                     if (list.length < batchSize) hasMoreVapi = false;
                     batchedFetched++;
                 }
@@ -273,19 +231,8 @@ export async function GET(req: Request) {
                         vapiAssistantNum = "Internal-Line";
                     }
 
-                    const vapiTimeKey = `${phoneRaw}_${vapiAssistantNum}_${new Date(startedAt).getTime().toString().substring(0, 7)}`;
-                    const twMatched = twilioLookup.get(vapiTimeKey);
-
-                    let vapiTelephonyCost = 0;
-                    if (twMatched) {
-                        vapiTelephonyCost = Math.abs(parseFloat(twMatched.price || 0));
-                        if (isNaN(vapiTelephonyCost)) vapiTelephonyCost = 0;
-                    }
-
-                    // Always calculate fallback if we don't have a Twilio match
-                    if (vapiTelephonyCost === 0) {
-                        vapiTelephonyCost = calculateTelephonyCost(safeDuration, phoneRaw, isInbound, vapiAssistantNum);
-                    }
+                    // Calculate telephony fallback based on prefix matching
+                    const vapiTelephonyCost = calculateTelephonyCost(safeDuration, phoneRaw, isInbound, vapiAssistantNum);
 
                     // Sum both Vapi's reported cost and our calculated telephony cost
                     // Vapi (Platform/AI) + Telephony (Carrier) = Total Unified Cost

@@ -328,13 +328,7 @@ export default function LeadsPage() {
                     >
                         Leads
                     </Button>
-                    <Button
-                        variant={view === "templates" ? "outline" : "ghost"}
-                        onClick={() => setView("templates")}
-                        className={view === "templates" ? "bg-slate-50" : ""}
-                    >
-                        Templates
-                    </Button>
+                    
                     <Button variant="outline" size="sm" onClick={() => view === "leads" ? refreshLeads() : fetchTemplates()}>
                         <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
                         Refresh

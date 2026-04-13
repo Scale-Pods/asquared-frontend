@@ -48,9 +48,10 @@ export default function VoiceLayout({
 
     return (
         <div className="flex h-screen overflow-hidden bg-zinc-50 text-slate-900">
-            <aside className="w-64 flex-col bg-white border-r border-zinc-200 hidden md:flex font-sans">
-                <div className="p-6 pb-4 flex justify-center">
-                    <div className="relative w-48 h-16">
+            <aside className="w-72 flex-col bg-[#000000] border-r border-zinc-800 hidden md:flex font-sans">
+                {/* Logo Section - Flush to top with brand background */}
+                <div className="p-8 flex justify-center bg-[#000000] relative overflow-hidden">
+                    <div className="relative w-full h-16 transition-transform hover:scale-105 duration-300">
                         <Image
                             src="/ASquared Logo White-01.png"
                             alt="Asquared Logo"
@@ -61,39 +62,41 @@ export default function VoiceLayout({
                     </div>
                 </div>
 
-                <div className="px-4 pb-2">
+                <div className="px-6 py-6">
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button
                                 variant="outline"
-                                className="w-full justify-between bg-white border-slate-200 text-slate-700 hover:bg-slate-50 h-10 shadow-sm"
+                                className="w-full justify-between bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-800 h-11 shadow-sm px-4 rounded-xl"
                             >
-                                <span className="flex items-center gap-2">
-                                    <LayoutDashboard className="h-4 w-4 text-purple-600" />
-                                    <span>Switch Dashboard</span>
+                                <span className="flex items-center gap-3">
+                                    <div className="p-1.5 rounded-lg bg-zinc-800">
+                                        <LayoutDashboard className="h-4 w-4 text-cyan-400" />
+                                    </div>
+                                    <span className="font-semibold text-sm truncate uppercase tracking-wider">Voice Agent</span>
                                 </span>
-                                <ChevronDown className="h-4 w-4 opacity-50" />
+                                <ChevronDown className="h-4 w-4 opacity-50 flex-shrink-0" />
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-[220px]" side="top">
-                            <DropdownMenuItem asChild>
-                                <Link href="/dashboard" className="cursor-pointer w-full flex items-center">
-                                    <LayoutDashboard className="mr-2 h-4 w-4" /> Master Overview
+                        <DropdownMenuContent align="start" className="w-[240px] p-2 rounded-xl shadow-2xl bg-zinc-900 border-zinc-800 text-zinc-300">
+                            <DropdownMenuItem asChild className="rounded-lg py-2.5 cursor-pointer hover:bg-zinc-800 focus:bg-zinc-800 focus:text-cyan-400">
+                                <Link href="/dashboard" className="w-full flex items-center">
+                                    <LayoutDashboard className="mr-3 h-4 w-4 text-zinc-500" /> <span className="font-medium">Master Overview</span>
                                 </Link>
                             </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                                <Link href="/dashboard/email" className="cursor-pointer w-full flex items-center">
-                                    <Mail className="mr-2 h-4 w-4" /> Email Marketing
+                            <DropdownMenuItem asChild className="rounded-lg py-2.5 cursor-pointer hover:bg-zinc-800 focus:bg-zinc-800 focus:text-cyan-400">
+                                <Link href="/dashboard/email" className="w-full flex items-center">
+                                    <Mail className="mr-3 h-4 w-4 text-zinc-500" /> <span className="font-medium">Email Marketing</span>
                                 </Link>
                             </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                                <Link href="/dashboard/whatsapp" className="cursor-pointer w-full flex items-center">
-                                    <MessageCircle className="mr-2 h-4 w-4" /> WhatsApp CRM
+                            <DropdownMenuItem asChild className="rounded-lg py-2.5 cursor-pointer hover:bg-zinc-800 focus:bg-zinc-800 focus:text-cyan-400">
+                                <Link href="/dashboard/whatsapp" className="w-full flex items-center">
+                                    <MessageCircle className="mr-3 h-4 w-4 text-zinc-500" /> <span className="font-medium">WhatsApp CRM</span>
                                 </Link>
                             </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                                <Link href="/dashboard/voice" className="cursor-pointer w-full flex items-center">
-                                    <Mic className="mr-2 h-4 w-4" /> Voice Agent
+                            <DropdownMenuItem asChild className="rounded-lg py-2.5 cursor-pointer hover:bg-zinc-800 focus:bg-zinc-800 focus:text-cyan-400">
+                                <Link href="/dashboard/voice" className="w-full flex items-center">
+                                    <Mic className="mr-3 h-4 w-4 text-zinc-500" /> <span className="font-medium">Voice Agent</span>
                                 </Link>
                             </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -104,19 +107,19 @@ export default function VoiceLayout({
                     <div className="h-[1px] w-full bg-zinc-100"></div>
                 </div>
 
-                <nav className="flex-1 overflow-auto px-4 space-y-2">
+                <nav className="flex-1 overflow-auto px-4 space-y-1.5 mt-2">
                     {voiceSidebarItems.map((item, index) => {
                         const isActive = pathname === item.href;
                         return (
                             <Link
                                 key={index}
                                 href={item.href}
-                                className={`group flex items-center gap-4 rounded-xl px-4 py-3 text-sm font-medium transition-all ${isActive
-                                    ? "bg-gradient-to-r from-purple-600 to-fuchsia-500 text-white shadow-md shadow-purple-500/20"
-                                    : "text-slate-500 hover:text-slate-900 hover:bg-zinc-100"
+                                className={`group flex items-center gap-4 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-300 ${isActive
+                                    ? "bg-cyan-600 text-white shadow-lg shadow-cyan-900/20"
+                                    : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900"
                                     }`}
                             >
-                                <item.icon className={`h-5 w-5 ${isActive ? "text-white" : "text-slate-400 group-hover:text-slate-600 transition-colors"}`} />
+                                <item.icon className={`h-5 w-5 ${isActive ? "text-white" : "text-zinc-600 group-hover:text-zinc-400 transition-colors"}`} />
                                 {item.title}
                             </Link>
                         );

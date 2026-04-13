@@ -28,7 +28,7 @@ export async function GET() {
 
         while (hasMore) {
             // Construct URL without potential double slashes, including pagination
-            const url = `${baseUrl}/${tableName}?select=*,Phone&offset=${offset}&limit=${limit}`;
+            const url = `${baseUrl}/${tableName}?select=*&offset=${offset}&limit=${limit}`;
 
             // Legacy AbortController for Node 22 compatibility
             const controller = new AbortController();

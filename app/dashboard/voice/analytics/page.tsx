@@ -176,60 +176,37 @@ export default function VoiceAnalyticsPage() {
             else if (dur < 300) durationBuckets['2m-5m']++;
             else durationBuckets['5m+']++;
 
-            // ── Funnel Metrics Calculation ──────────────────────────────────
-            // 1. PICK-UP RATE: call was answered (duration > 18s AND terminal status)
-            const isConnected = dur > 18 && (
-                call.status === 'done' || call.status === 'ended' ||
-                call.status === 'completed' || call.status === 'answered' || call.status === 'success'
-            );
+            // 1. PICK-UP RATE: call was answered (duration > 18s)
+            const isConnected = dur > 18;
             if (isConnected) connectedCount++;
-
+ 
             if (isConnected) {
                 // 2. COMPLETION RATE: count calls where Assistant or Customer ended the call
                 const reason = (call.endedReason || "").toLowerCase();
-                const status = (call.status || "").toLowerCase();
                 
-                // Vapi Reasons
+                // Vapi Reasons - specifically Assistant Ended and Customer Ended
                 const isCompleted = 
                     reason.includes("assistant-ended-call") || reason.includes("customer-ended-call") || 
-                    reason.includes("assistant ended call") || reason.includes("customer ended call");
+                    reason.includes("assistant ended call") || reason.includes("customer ended call") ||
+                    reason.includes("assistant-ended") || reason.includes("customer-ended");
                 
                 if (isCompleted) {
                     qualifiedCount++; 
                 }
 
-                // 3. POSITIVE RESPONSE RATE: count based on specific positive lead statuses
-                // 3. POSITIVE RESPONSE RATE: count based on specific positive lead statuses
-                const leadStatus = (call.leadStatus || "").trim().toLowerCase();
-                const isPositive = leadStatus.includes("interest") || leadStatus.includes("postpone");
-                if (isPositive) {
-                    // This count is still kept for any per-call analytics if needed
+                // 3. Positive Response Rate: check if lead status contains "Awaiting availability"
+                if (call.phone && globalLeads) {
+                    const targetPhone = call.phone.replace(/\D/g, '');
+                    const lead = globalLeads.find((l: any) => l.phone && l.phone.replace(/\D/g, '') === targetPhone);
+                    if (lead?.voice_call_status?.includes("Awaiting availability")) {
+                        positiveCount++;
+                    }
                 }
             }
         }); // end data.forEach
 
-        // 3. GLOBAL POSITIVE RESPONSE RATE: Sum from ALL leads (Overall sum)
-        // User requested to remove date filtering for this metric
-        const leadsToCount = globalLeads;
-
-        const countPositives = (list: any[]) => {
-            let count = 0;
-            list.forEach(l => {
-                const status = (l.lead_status || l["Lead Status"] || "").trim();
-                
-                // Strictly ONLY these two exact strings (based on request)
-                const isMatch = status === "Expression Of Interest" || 
-                               status === "Callback- Plan Postponed";
-                
-                if (isMatch) {
-                    count++;
-                }
-            });
-            return count;
-        };
-
-        let globalPositiveCount = countPositives(leadsToCount);
-        console.log(`[Analytics] Total leads scanned: ${globalLeads.length}, Global Positive Sum: ${globalPositiveCount}`);
+        let globalPositiveCount = positiveCount;
+        console.log(`[Analytics] Total calls scanned: ${totalCalls}, Positive Sum: ${globalPositiveCount}`);
         
         setStats(prev => ({
             ...prev,
@@ -322,7 +299,7 @@ export default function VoiceAnalyticsPage() {
                     <StatCard 
                         title="Positive Response Rate" 
                         value={`${stats.positiveRate.toFixed(1)}%`} 
-                        change="EOI & Callback" 
+                        change="Awaiting availability" 
                         icon={<CheckCircle className="h-5 w-5" />} 
                         color="text-orange-600" 
                         bg="bg-orange-50" 

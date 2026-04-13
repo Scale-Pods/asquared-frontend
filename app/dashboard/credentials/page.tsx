@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import { useData } from "@/context/DataContext";
 
 export default function CredentialsPage() {
-    const { calls, voiceBalance, twilioBalance, loadingBalances } = useData();
+    const { calls, voiceBalance, didlogicBalance, loadingBalances } = useData();
 
     const vapiAgentUsed = React.useMemo(() => {
         if (!calls || !Array.isArray(calls)) return 0;
@@ -89,8 +89,8 @@ export default function CredentialsPage() {
                     iconBg="bg-emerald-50"
                 >
                     <div className="grid gap-6 md:grid-cols-2">
-                        <ReadOnlyField label="WhatsApp Account 1 " value="+971 52 563 3027" />
-                        <ReadOnlyField label="WhatsApp Account 2" value="+971 52 563 2921" />
+                        <ReadOnlyField label="WhatsApp Account 1 " value="No number added" />
+                        <ReadOnlyField label="WhatsApp Account 2" value="No number added" />
                     </div>
                 </CredentialSection>
 
@@ -102,23 +102,54 @@ export default function CredentialsPage() {
                     iconColor="text-cyan-600"
                     iconBg="bg-cyan-50"
                 >
-                    <div className="grid gap-8 md:grid-cols-3">
+                    <div className="grid gap-8 md:grid-cols-1">
                         {/* UK Section */}
                         <div className="space-y-4 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
-                            <ReadOnlyField label="Twilio (UK)" value="+44 (7462) 179309" />
-                            <ReadOnlyField label="Agent ID" value="918c25eb-9882-452e-86df-b4851d464852" />
+                            <ReadOnlyField label="Didlogic (UK)" value="+44 (20) 8097 8341" />
+                            <ReadOnlyField label="Provisioned ID" value="682cf6ae-23fd-44f3-a4a3-756998cd62c1" />
                         </div>
-
-                        {/* US Section */}
-                        <div className="space-y-4 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
-                            <ReadOnlyField label="Twilio (US)" value="+1 (478) 215 9151" />
-                            <ReadOnlyField label="Agent ID" value="b35e3032-7865-4913-ba22-a913b5d4117b" />
-                        </div>
+ 
+                       
 
 
                     </div>
                 </CredentialSection>
 
+                {/* Didlogic Telephony Section */}
+                <CredentialSection
+                    title="Didlogic Telephony"
+                    description="Telephony carrier management and balance overview."
+                    icon={Smartphone}
+                    iconColor="text-rose-600"
+                    iconBg="bg-rose-50"
+                    action={
+                        <Button className="bg-rose-600 hover:bg-rose-700 text-white gap-2" onClick={() => window.open('https://didlogic.com/portal', '_blank')}>
+                            <ExternalLink className="h-4 w-4" />
+                            Didlogic Portal
+                        </Button>
+                    }
+                >
+                    <div className="space-y-4">
+                        <div className="bg-rose-50/50 rounded-lg p-4 border border-rose-100 flex items-center justify-between shadow-sm">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-white rounded-md border border-rose-200">
+                                    <Smartphone className="h-5 w-5 text-rose-600" />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-bold text-slate-900">Didlogic Account</p>
+                                    <p className="text-xs text-slate-500 font-mono italic">Carrier Status: {didlogicBalance?.status === 'active' ? 'Active' : 'Pending'}</p>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">Available Balance</p>
+                                <p className="text-2xl font-black text-rose-600">
+                                    {didlogicBalance?.balance !== undefined ? `$${didlogicBalance.balance.toFixed(2)}` : 'Live Sync Pending'}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </CredentialSection>
+ 
                 {/* Voice Section */}
                 <CredentialSection
                     title="Voice Agent (Vapi)"
@@ -159,55 +190,7 @@ export default function CredentialsPage() {
 
 
 
-                {/* Twilio Section */}
-                <CredentialSection
-                    title="Twilio Telephony"
-                    description="Real-time balance and usage records for Twilio."
-                    icon={Smartphone}
-                    iconColor="text-rose-600"
-                    iconBg="bg-rose-50"
-                    action={
-                        <Button className="bg-rose-600 hover:bg-rose-700 text-white gap-2" onClick={() => window.open('https://console.twilio.com', '_blank')}>
-                            <ExternalLink className="h-4 w-4" />
-                            Twilio Console
-                        </Button>
-                    }
-                >
-                    <div className="space-y-4">
-                        <div className="bg-rose-50/50 rounded-lg p-4 border border-rose-100 flex items-center justify-between shadow-sm">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-white rounded-md border border-rose-200">
-                                    <Smartphone className="h-5 w-5 text-rose-600" />
-                                </div>
-                                <div>
-                                    <p className="text-sm font-bold text-slate-900">Twilio Account</p>
-                                    <p className="text-xs text-slate-500 font-mono">{twilioBalance?.account_sid || '---'}</p>
-                                </div>
-                            </div>
-                            <div className="text-right">
-                                <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">Available Balance</p>
-                                <p className="text-2xl font-black text-rose-600">
-                                    {twilioBalance?.balance !== undefined ? `$${twilioBalance.balance.toFixed(2)}` : '---'}
-                                </p>
-                            </div>
-                        </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="bg-white p-4 rounded-lg border border-slate-100 text-center shadow-sm">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Recharge (PAYG)</p>
-                                <p className="text-lg font-bold text-slate-800">
-                                    {twilioBalance?.total_recharge !== undefined ? `$${twilioBalance.total_recharge.toFixed(2)}` : '---'}
-                                </p>
-                            </div>
-                            <div className="bg-white p-4 rounded-lg border border-slate-100 text-center shadow-sm">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Used</p>
-                                <p className="text-lg font-bold text-slate-600">
-                                    {twilioBalance?.used !== undefined ? `$${twilioBalance.used.toFixed(2)}` : '---'}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </CredentialSection>
             </div>
         </div>
     );

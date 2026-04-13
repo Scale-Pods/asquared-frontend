@@ -41,26 +41,13 @@ const sidebarItems = [
     },
 ];
 
-function WalletModal({ isOpen, onClose, type, details, calls }: { isOpen: boolean, onClose: () => void, type: 'vapi' | 'twilio', details?: any, calls?: any[] }) {
+function WalletModal({ isOpen, onClose, type, details, calls }: { isOpen: boolean, onClose: () => void, type: 'vapi' | 'didlogic', details?: any, calls?: any[] }) {
     const { voiceBalance } = useData();
-
-    const title = (() => {
-        switch (type) {
-            case 'vapi': return 'Vapi Wallet';
-            case 'vapi': return 'Vapi Wallet';
-            case 'twilio': return 'Twilio Account';
-            default: return 'Balance Detail';
-        }
-    })();
-
-    const icon = (() => {
-        switch (type) {
-            case 'vapi': return <Mic className="h-5 w-5 text-blue-600" />;
-            case 'vapi': return <Mic className="h-5 w-5 text-blue-600" />;
-            case 'twilio': return <Smartphone className="h-5 w-5 text-rose-600" />;
-            default: return <Wallet className="h-5 w-5" />;
-        }
-    })();
+ 
+    const title = type === 'vapi' ? 'Vapi Wallet' : 'Didlogic Account';
+    const icon = type === 'vapi' 
+        ? <Mic className="h-5 w-5 text-blue-600" />
+        : <Smartphone className="h-5 w-5 text-rose-600" />;
 
     const vapiAgentUsed = useMemo(() => {
         // Prioritize Vapi API's native 'used' value if available
@@ -91,43 +78,24 @@ function WalletModal({ isOpen, onClose, type, details, calls }: { isOpen: boolea
                                 <span className="text-5xl font-black text-blue-600">
                                     ${vapiAgentUsed.toFixed(2)}
                                 </span>
-                                
                             </div>
                             <Button className="bg-blue-600 hover:bg-blue-700 text-white gap-2 h-12" onClick={() => window.open('https://vapi.ai', '_blank')}>
                                 <ExternalLink className="h-4 w-4" /> Add Funds to VAPI
                             </Button>
                         </div>
                     )}
-
-
-
-                    {type === 'twilio' && (
+ 
+                    {type === 'didlogic' && (
                         <div className="bg-rose-50/50 rounded-xl p-5 border border-rose-100 flex flex-col gap-4">
-                            <div className="grid grid-cols-1 gap-4">
-                                <div className="flex flex-col text-center bg-white p-6 rounded-lg border border-rose-100 shadow-sm">
-                                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Remaining Balance</span>
-                                    <span className="text-4xl font-black text-rose-600">
-                                        {typeof details?.balance === 'number' ? `$${details.balance.toFixed(2)}` : "---"}
-                                    </span>
-                                    <span className="text-[10px] text-slate-400 mt-2 font-mono uppercase">{details?.account_sid || "Account SID Loading..."}</span>
-                                </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="flex flex-col text-center bg-white p-3 rounded-lg border border-rose-100 shadow-sm">
-                                        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Total Pay-As-You-Go</span>
-                                        <span className="text-lg font-bold text-slate-700">
-                                            {typeof details?.total_recharge === 'number' ? `$${details.total_recharge.toFixed(2)}` : "---"}
-                                        </span>
-                                    </div>
-                                    <div className="flex flex-col text-center bg-white p-3 rounded-lg border border-rose-100 shadow-sm">
-                                        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Used to Date</span>
-                                        <span className="text-lg font-bold text-slate-500">
-                                            {typeof details?.used === 'number' ? `$${details.used.toFixed(2)}` : "---"}
-                                        </span>
-                                    </div>
-                                </div>
+                            <div className="flex flex-col text-center bg-white p-6 rounded-lg border border-rose-100 shadow-sm">
+                                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Carrier Status</span>
+                                <span className="text-4xl font-black text-rose-600">
+                                    ACTIVE
+                                </span>
+                                <span className="text-[10px] text-slate-400 mt-2 font-mono uppercase tracking-widest">Didlogic SIP Trunking</span>
                             </div>
-                            <Button className="bg-rose-600 hover:bg-rose-700 text-white gap-2" onClick={() => window.open('https://console.twilio.com', '_blank')}>
-                                <ExternalLink className="h-4 w-4" /> Add Funds to Twilio 
+                            <Button className="bg-rose-600 hover:bg-rose-700 text-white gap-2" onClick={() => window.open('https://didlogic.com/portal', '_blank')}>
+                                <ExternalLink className="h-4 w-4" /> Go to Didlogic Portal
                             </Button>
                         </div>
                     )}
@@ -212,7 +180,7 @@ function DashboardContent({
     const {
         calls,
         voiceBalance,
-        twilioBalance,
+        didlogicBalance,
         loadingBalances,
         loadingCalls
     } = useData();
@@ -228,7 +196,7 @@ function DashboardContent({
 
 
 
-    const [walletModal, setWalletModal] = useState<{ isOpen: boolean, type: 'vapi' | 'twilio' }>({
+    const [walletModal, setWalletModal] = useState<{ isOpen: boolean, type: 'vapi' | 'didlogic' }>({
         isOpen: false,
         type: 'vapi'
     });
@@ -242,10 +210,10 @@ function DashboardContent({
         return (
             <div className="flex h-screen overflow-hidden bg-zinc-50 text-slate-900">
                 {/* Sidebar */}
-                <aside className="hidden w-64 flex-col bg-white border-r border-zinc-200 md:flex font-sans">
-                    {/* Logo Section */}
-                    <div className="p-6 pb-4 flex justify-center">
-                        <Link href="/" className="relative w-48 h-16 block">
+                <aside className="hidden w-72 flex-col bg-[#000000] border-r border-zinc-800 md:flex font-sans">
+                    {/* Logo Section - Flush to top with brand background */}
+                    <div className="p-8 flex justify-center bg-[#000000] relative overflow-hidden">
+                        <Link href="/" className="relative w-full h-16 block transition-all hover:scale-105 duration-300">
                             <Image
                                 src="/ASquared Logo White-01.png"
                                 alt="Asquared Logo"
@@ -256,64 +224,67 @@ function DashboardContent({
                         </Link>
                     </div>
 
-                    <div className="px-4 pb-2">
+                    <div className="px-6 py-6">
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button
                                     suppressHydrationWarning
                                     variant="outline"
-                                    className="w-full justify-between bg-white border-slate-200 text-slate-700 hover:bg-slate-50 h-10 shadow-sm"
+                                    className="w-full justify-between bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-800 h-11 shadow-sm px-4 rounded-xl"
                                 >
-                                    <span className="flex items-center gap-2">
-                                        <activeConfig.icon className="h-4 w-4 text-blue-600" />
-                                        <span className="truncate">{activeConfig.label}</span>
+                                    <span className="flex items-center gap-3">
+                                        <div className="p-1.5 rounded-lg bg-zinc-800">
+                                            <activeConfig.icon className="h-4 w-4 text-cyan-400" />
+                                        </div>
+                                        <span className="font-semibold text-sm truncate uppercase tracking-wider">{activeConfig.label}</span>
                                     </span>
                                     <ChevronDown className="h-4 w-4 opacity-50 flex-shrink-0" />
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-[220px]">
-                                <DropdownMenuItem onClick={() => router.push("/dashboard")}>
-                                    <LayoutDashboard className="mr-2 h-4 w-4" /> Master Overview
+                            <DropdownMenuContent align="start" className="w-[240px] p-2 rounded-xl shadow-2xl bg-zinc-900 border-zinc-800 text-zinc-300">
+                                <DropdownMenuItem className="rounded-lg py-2.5 cursor-pointer hover:bg-zinc-800 focus:bg-zinc-800 focus:text-cyan-400" onClick={() => router.push("/dashboard")}>
+                                    <LayoutDashboard className="mr-3 h-4 w-4 text-zinc-500" /> <span className="font-medium">Master Overview</span>
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => router.push("/dashboard/email")}>
-                                    <Mail className="mr-2 h-4 w-4" /> Email Marketing
+                                <DropdownMenuItem className="rounded-lg py-2.5 cursor-pointer hover:bg-zinc-800 focus:bg-zinc-800 focus:text-cyan-400" onClick={() => router.push("/dashboard/email")}>
+                                    <Mail className="mr-3 h-4 w-4 text-zinc-500" /> <span className="font-medium">Email Marketing</span>
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => router.push("/dashboard/whatsapp")}>
-                                    <MessageCircle className="mr-2 h-4 w-4" /> WhatsApp CRM
+                                <DropdownMenuItem className="rounded-lg py-2.5 cursor-pointer hover:bg-zinc-800 focus:bg-zinc-800 focus:text-cyan-400" onClick={() => router.push("/dashboard/whatsapp")}>
+                                    <MessageCircle className="mr-3 h-4 w-4 text-zinc-500" /> <span className="font-medium">WhatsApp CRM</span>
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => router.push("/dashboard/voice")}>
-                                    <Mic className="mr-2 h-4 w-4" /> Voice Agent
+                                <DropdownMenuItem className="rounded-lg py-2.5 cursor-pointer hover:bg-zinc-800 focus:bg-zinc-800 focus:text-cyan-400" onClick={() => router.push("/dashboard/voice")}>
+                                    <Mic className="mr-3 h-4 w-4 text-zinc-500" /> <span className="font-medium">Voice Agent</span>
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </div>
 
-                    <div className="px-4 py-2">
-                        <div className="h-[1px] w-full bg-zinc-100"></div>
+                    <div className="px-6 py-2">
+                        <div className="h-[1px] w-full bg-zinc-800"></div>
                     </div>
 
-                    <nav className="flex-1 overflow-auto px-4 space-y-2">
+                    <nav className="flex-1 overflow-auto px-4 space-y-1.5 mt-2">
                         {activeConfig.items.map((item: any, index: number) => {
                             const isActive = pathname === item.href;
                             return (
                                 <Link
                                     key={index}
                                     href={item.href}
-                                    className={`group flex items-center gap-4 rounded-xl px-4 py-3 text-sm font-medium transition-all ${isActive
-                                        ? "bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-md shadow-blue-500/20"
-                                        : "text-slate-500 hover:text-slate-900 hover:bg-zinc-100"
+                                    className={`group flex items-center gap-4 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-300 ${isActive
+                                        ? "bg-cyan-600 text-white shadow-lg shadow-cyan-900/20"
+                                        : "text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900"
                                         }`}
                                 >
-                                    <item.icon className={`h-5 w-5 ${isActive ? "text-white" : "text-slate-400 group-hover:text-slate-600 transition-colors"}`} />
+                                    <item.icon className={`h-5 w-5 ${isActive ? "text-white" : "text-zinc-600 group-hover:text-zinc-400 transition-colors"}`} />
                                     {item.title}
                                 </Link>
                             );
                         })}
                     </nav>
-                    <div className="mt-auto p-4 mb-4 space-y-3">
+                    <div className="mt-auto p-6 space-y-4">
+                        <div className="h-[1px] w-full bg-zinc-800 mb-2"></div>
                         <Button
                             variant="ghost"
-                            className="w-full justify-start gap-2 text-slate-500 hover:text-slate-900 hover:bg-zinc-100"
+                            className="w-full justify-start gap-3 text-zinc-500 hover:text-red-400 hover:bg-red-950/30 transition-colors rounded-xl h-11 px-4"
                             onClick={async () => {
                                 await logout();
                                 router.push('/');
@@ -321,7 +292,7 @@ function DashboardContent({
                             }}
                         >
                             <LogOut className="h-4 w-4" />
-                            Logout
+                            <span className="font-medium">Logout</span>
                         </Button>
                     </div>
                 </aside>
@@ -350,23 +321,25 @@ function DashboardContent({
                                             </span>
                                         </div>
                                     </Button>
-
-
-
-                                    {/* Twilio Button */}
+ 
+                                    {/* Didlogic Button */}
                                     <Button
                                         variant="outline"
                                         className="h-10 px-3 border-rose-200 bg-rose-50/30 hover:bg-rose-50 text-rose-700 gap-2 flex items-center shadow-sm"
-                                        onClick={() => setWalletModal({ isOpen: true, type: 'twilio' })}
+                                        onClick={() => setWalletModal({ isOpen: true, type: 'didlogic' })}
                                     >
                                         <Smartphone className="h-3.5 w-3.5" />
                                         <div className="flex flex-col items-start leading-[1.1]">
-                                            <span className="text-[9px] font-bold uppercase opacity-70">Twilio</span>
+                                            <span className="text-[9px] font-bold uppercase opacity-70">Didlogic</span>
                                             <span className="text-xs font-bold">
-                                                {loadingBalances ? "..." : (twilioBalance?.balance !== undefined ? `$${twilioBalance.balance.toFixed(2)}` : "N/A")}
+                                                {loadingBalances ? "..." : (didlogicBalance?.balance !== undefined ? `$${didlogicBalance.balance.toFixed(2)}` : "Active")}
                                             </span>
                                         </div>
                                     </Button>
+
+
+
+
 
 
 
@@ -378,13 +351,7 @@ function DashboardContent({
                     <WalletModal
                         isOpen={walletModal.isOpen}
                         type={walletModal.type}
-                        details={(() => {
-                            switch (walletModal.type) {
-                                case 'vapi': return voiceBalance?.vapi;
-                                case 'twilio': return twilioBalance;
-                                default: return null;
-                            }
-                        })()}
+                        details={walletModal.type === 'vapi' ? voiceBalance?.vapi : didlogicBalance}
                         calls={calls}
                         onClose={() => setWalletModal({ ...walletModal, isOpen: false })}
                     />

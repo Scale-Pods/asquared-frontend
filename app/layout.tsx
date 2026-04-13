@@ -8,9 +8,9 @@ export const metadata: Metadata = {
     title: "Asquared | AI Automation",
     description: "AI-Powered Marketing & Operations managed by ScalePods",
     icons: {
-        icon: '/logo.png',
-        shortcut: '/logo.png',
-        apple: '/logo.png',
+        icon: '/ASquared Logo White-01.png',
+        shortcut: '/ASquared Logo White-01.png',
+        apple: '/ASquared Logo White-01.png',
     },
 };
 
