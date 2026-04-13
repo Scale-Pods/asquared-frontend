@@ -19,50 +19,44 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 
 // Progressive fetch for missing metadata (phone numbers/direction)
 // Static cells that rely on pre-fetched and normalized data from the API
-const DynamicRowCells = ({ call, leads }: { call: any, leads: any[] }) => {
+const DynamicRowCells = ({ call, leadsLookup }: { call: any, leadsLookup: Map<string, any> }) => {
     // RESOLVE: Prioritize backend names, then Leads database, then Vapi metadata
     let guestName = call.name || "Guest";
     const guestNum = call.phone || "Unknown";
     const realType = call.type || (call.isInbound ? "Inbound" : "Outbound");
     const isInboundState = call.isInbound;
-
+ 
     // Eagerly resolve name from our Leads database based on phone if Guest
-    if ((!guestName || guestName === "Guest" || guestName === "Unknown") && call.phone && leads) {
+    if ((!guestName || guestName === "Guest" || guestName === "Unknown") && call.phone) {
         const targetPhone = call.phone.replace(/\D/g, '');
-        if (targetPhone && targetPhone.length > 5) {
-            const foundLead = leads.find((l: any) => l.phone && l.phone.replace(/\D/g, '') === targetPhone);
-            if (foundLead && foundLead.name) {
-                guestName = foundLead.name;
-            }
+        const foundLead = leadsLookup.get(targetPhone);
+        if (foundLead && foundLead.name) {
+            guestName = foundLead.name;
         }
     }
-
-    // Purely column based: use voice_call_status or the actual sentiment analysis (llmIntent)
-    let voiceStatus = call.voice_call_status || call.llmIntent || "";
+ 
+    // Purely column based: use voice_call_status from the database
+    let voiceStatus = call.voice_call_status || "";
     let voiceNote = call.note || call.leadNote || "";
-
-    if (!voiceStatus && call.phone && leads) {
+ 
+    if (!voiceStatus && call.phone) {
         const targetPhone = call.phone.replace(/\D/g, '');
-        if (targetPhone && targetPhone.length > 5) {
-            // Check ALL matching leads for this number (handling duplicates)
-            const matchingLeads = leads.filter((l: any) => l.phone && l.phone.replace(/\D/g, '') === targetPhone);
-            
-            // 1. Look for any matching record that has a voice_call_status
-            const leadWithStatus = matchingLeads.find(l => l.voice_call_status && l.voice_call_status !== "-");
-            if (leadWithStatus) {
-                voiceStatus = leadWithStatus.voice_call_status;
-            }
-            
-            // 2. Look for any matching record that has a note (if we don't have one yet)
-            if (!voiceNote) {
-                const leadWithNote = matchingLeads.find(l => l.note);
-                if (leadWithNote) voiceNote = leadWithNote.note;
-            }
+        const found = leadsLookup.get(targetPhone);
+        if (found) {
+            voiceStatus = found.voice_call_status || "";
+            if (!voiceNote) voiceNote = found.note || "";
         }
     }
 
     const hasData = !!voiceStatus;
-    const displayStatus = voiceStatus || "Please hear the voice rec or read transcript unless you get sentiment analysis.";
+    
+    // Formatting for display (e.g., did_not_answer -> Did Not Answer)
+    const formatStatus = (s: string) => {
+        if (!s || s === "-") return "";
+        return s.replace(/_/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+    };
+
+    const displayStatus = hasData ? formatStatus(voiceStatus) : "Please hear the voice rec or read transcript unless you get sentiment analysis.";
 
     return (
         <>
@@ -145,6 +139,7 @@ const DynamicRowCells = ({ call, leads }: { call: any, leads: any[] }) => {
 export default function VoiceLogsPage() {
     const { calls: globalCalls, loadingCalls, refreshCalls, leads, loadingLeads } = useData();
     const [allCallsMapped, setAllCallsMapped] = useState<any[]>([]);
+    const [leadsLookup, setLeadsLookup] = useState<Map<string, any>>(new Map());
     const [calls, setCalls] = useState<any[]>([]);
     const [loadingLocal, setLoadingLocal] = useState(false);
     const loading = loadingCalls || loadingLocal;
@@ -154,9 +149,9 @@ export default function VoiceLogsPage() {
         from: subDays(new Date(), 7),
         to: new Date(),
     });
-    const [statusFilter, setStatusFilter] = useState("all");
     const [typeFilter, setTypeFilter] = useState("all");
     const [providerFilter, setProviderFilter] = useState("vapi");
+    const [sentimentFilter, setSentimentFilter] = useState("all");
     const [phoneFilter, setPhoneFilter] = useState("");
     const [sortBy, setSortBy] = useState("newest");
     const [costModalOpen, setCostModalOpen] = useState(false);
@@ -167,6 +162,27 @@ export default function VoiceLogsPage() {
 
     useEffect(() => {
         if (loadingCalls || loadingLeads || !globalCalls) return;
+
+        // Pre-compute leads lookup Map for O(1) performance
+        const lookup = new Map();
+        if (leads) {
+            leads.forEach((l: any) => {
+                if (!l.phone) return;
+                const clean = l.phone.replace(/\D/g, '');
+                if (clean && clean.length > 5) {
+                    const existing = lookup.get(clean);
+                    // Sticky merge duplicate lead records
+                    if (!existing || (l.voice_call_status && l.voice_call_status !== "-" && !existing.voice_call_status)) {
+                        lookup.set(clean, {
+                            name: l.name,
+                            voice_call_status: l.voice_call_status,
+                            note: l.note
+                        });
+                    }
+                }
+            });
+        }
+        setLeadsLookup(lookup);
 
         const mappedCalls = globalCalls.map((c: any) => {
             const isInbound = c.isInbound === true;
@@ -214,7 +230,7 @@ export default function VoiceLogsPage() {
 
         fetchRealData();
         setCurrentPage(1);
-    }, [dateRange, providerFilter, typeFilter, statusFilter, phoneFilter, sortBy]);
+    }, [dateRange, providerFilter, typeFilter, phoneFilter, sortBy]);
 
     // Re-apply filtering whenever data or filters change (no page reset here).
     useEffect(() => {
@@ -232,8 +248,23 @@ export default function VoiceLogsPage() {
                 if (callDate < from || callDate > to) return false;
             }
 
-            if (statusFilter !== "all" && call.status !== statusFilter) return false;
             if (typeFilter !== "all" && call.type?.toLowerCase() !== typeFilter.toLowerCase()) return false;
+
+            if (sentimentFilter !== "all") {
+                const s = sentimentFilter.toLowerCase();
+                const vStatus = (call.voice_call_status || "").toLowerCase();
+                
+                // O(1) Lookup instead of O(N) filter
+                let leadStatus = "";
+                if (call.phone) {
+                    const targetPhone = call.phone.replace(/\D/g, '');
+                    const found = leadsLookup.get(targetPhone);
+                    if (found && found.voice_call_status) leadStatus = found.voice_call_status.toLowerCase();
+                }
+
+                const matchesAny = vStatus.includes(s) || leadStatus.includes(s);
+                if (!matchesAny) return false;
+            }
 
             if (phoneFilter) {
                 const searchStr = phoneFilter.toLowerCase().trim();
@@ -265,7 +296,7 @@ export default function VoiceLogsPage() {
         });
 
         setCalls(sortedCalls);
-    }, [allCallsMapped, dateRange, statusFilter, typeFilter, providerFilter, phoneFilter, sortBy]);
+    }, [allCallsMapped, dateRange, sentimentFilter, typeFilter, providerFilter, phoneFilter, sortBy, leadsLookup]);
 
     // SILENT FILL: Periodically refresh recent calls that are missing sentiment/status
     useEffect(() => {
@@ -273,7 +304,7 @@ export default function VoiceLogsPage() {
             const now = new Date();
             // Check if any call from the last 15 minutes is missing its sentiment/status
             const hasRecentMissingData = calls.some(c => {
-                const isMissing = !c.voice_call_status && !c.llmIntent;
+                const isMissing = !c.voice_call_status;
                 if (!isMissing) return false;
                 
                 const startedAt = c.startedAt ? new Date(c.startedAt) : null;
@@ -366,12 +397,18 @@ export default function VoiceLogsPage() {
                             <SelectItem value="Outbound">Outbound</SelectItem>
                         </SelectContent>
                     </Select>
-                    <Select value={statusFilter} onValueChange={setStatusFilter}>
-                        <SelectTrigger className="w-[140px] h-9"><SelectValue placeholder="Status" /></SelectTrigger>
+                    
+
+                    <Select value={sentimentFilter} onValueChange={setSentimentFilter}>
+                        <SelectTrigger className="w-[180px] h-9">
+                            <SelectValue placeholder="Sentiment & Status" />
+                        </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">All Status</SelectItem>
-                            <SelectItem value="answered">Answered / Done</SelectItem>
-                            <SelectItem value="failed">Failed / Error</SelectItem>
+                            <SelectItem value="No answer">No answer</SelectItem>
+                            <SelectItem value="Contacted">Contacted</SelectItem>
+                            <SelectItem value="did_not_answer">Did Not Answer</SelectItem>
+                            <SelectItem value="Awaiting availability">Awaiting availability</SelectItem>
                         </SelectContent>
                     </Select>
 
@@ -429,7 +466,7 @@ export default function VoiceLogsPage() {
                                         className="cursor-pointer hover:bg-slate-50/50 transition-colors"
                                         onClick={() => handleRowClick(call)}
                                     >
-                                        <DynamicRowCells call={call} leads={leads} />
+                                        <DynamicRowCells call={call} leadsLookup={leadsLookup} />
                                         <TableCell>
                                             <Badge variant="outline" className={`text-[10px] uppercase border-${call.status === 'answered' ? 'emerald' : 'slate'}-200 text-${call.status === 'answered' ? 'emerald' : 'slate'}-600`}>
                                                 {call.status}
