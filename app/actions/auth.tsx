@@ -91,8 +91,20 @@ export async function logout() {
 
 import { Resend } from 'resend';
 import { ResetPasswordEmail } from '@/components/emails/reset-password-template';
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+ 
+// Lazy-initialize Resend to prevent crash if API key is missing
+let resendInstance: Resend | null = null;
+function getResend() {
+    if (!resendInstance) {
+        const apiKey = process.env.RESEND_API_KEY;
+        if (!apiKey) {
+            console.error("RESEND_API_KEY is missing. Email features will not work.");
+            return null;
+        }
+        resendInstance = new Resend(apiKey);
+    }
+    return resendInstance;
+}
 
 export async function forgotPassword(prevState: any, formData: FormData) {
     const email = formData.get('email') as string;
@@ -130,6 +142,11 @@ export async function forgotPassword(prevState: any, formData: FormData) {
             // Send Email
             const resetLink = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
             console.log(`Sending email to ${email} via Resend... Link: ${resetLink}`);
+
+            const resend = getResend();
+            if (!resend) {
+                return { error: 'Email service is not configured. Please contact support.' };
+            }
 
             const { data, error } = await resend.emails.send({
                 from: 'Asquared <onboarding@resend.dev>',

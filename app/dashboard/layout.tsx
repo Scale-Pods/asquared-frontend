@@ -287,8 +287,7 @@ function DashboardContent({
                             className="w-full justify-start gap-3 text-zinc-500 hover:text-red-400 hover:bg-red-950/30 transition-colors rounded-xl h-11 px-4"
                             onClick={async () => {
                                 await logout();
-                                router.push('/');
-                                router.refresh();
+                                window.location.href = '/';
                             }}
                         >
                             <LogOut className="h-4 w-4" />

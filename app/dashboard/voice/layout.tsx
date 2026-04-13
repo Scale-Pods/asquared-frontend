@@ -11,8 +11,11 @@ import {
     Mail,
     MessageCircle,
     Mic,
-    ChevronDown
+    ChevronDown,
+    LogOut
 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { logout } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
 import {
     DropdownMenu,
@@ -126,8 +129,19 @@ export default function VoiceLayout({
                     })}
                 </nav>
 
-                <div className="mt-auto p-4 mb-4">
-                    {/* Switcher moved to top */}
+                <div className="mt-auto p-6 space-y-4">
+                    <div className="h-[1px] w-full bg-zinc-800 mb-2"></div>
+                    <Button
+                        variant="ghost"
+                        className="w-full justify-start gap-3 text-zinc-500 hover:text-red-400 hover:bg-red-950/30 transition-colors rounded-xl h-11 px-4"
+                        onClick={async () => {
+                            await logout();
+                            window.location.href = '/';
+                        }}
+                    >
+                        <LogOut className="h-4 w-4" />
+                        <span className="font-medium">Logout</span>
+                    </Button>
                 </div>
             </aside>
 

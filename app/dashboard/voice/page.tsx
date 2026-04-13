@@ -45,7 +45,13 @@ export default function VoiceDashboardPage() {
         to: new Date(),
     });
 
-    const { calls: globalCalls, loadingCalls, voiceBalance, refreshAll } = useData();
+    const { 
+        calls: globalCalls, 
+        loadingCalls, 
+        voiceBalance, 
+        refreshCalls, // This is required for real-time date filtering
+        refreshAll 
+    } = useData();
 
     useEffect(() => {
         if (voiceBalance) {
@@ -58,6 +64,31 @@ export default function VoiceDashboardPage() {
     }, [voiceBalance]);
 
     const loading = loadingLocal || loadingCalls;
+ 
+    /**
+     * LIVE SYNC: This effect ensures that whenever you change the Date Range, 
+     * the app fetches the EXACT matching data from Vapi. 
+     * Without this, you only see a partial 7-day cache.
+     */
+    useEffect(() => {
+        const fetchRealData = async () => {
+            if (!dateRange?.from) return;
+            setLoadingLocal(true);
+            try {
+                const params: Record<string, string> = {
+                    from: dateRange.from.toISOString(),
+                };
+                if (dateRange.to) {
+                    params.to = dateRange.to.toISOString();
+                }
+                await refreshCalls(params);
+            } finally {
+                setLoadingLocal(false);
+            }
+        };
+ 
+        fetchRealData();
+    }, [dateRange]);
 
     useEffect(() => {
         if (loading) return;
