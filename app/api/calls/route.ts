@@ -48,12 +48,12 @@ async function fetchLeadsCache() {
 
     const baseUrl = `${supabaseUrl.replace(/\/$/, "")}/rest/v1`;
     const headers = { "apikey": secretKey, "Authorization": `Bearer ${secretKey}` };
-    const leadsMap = new Map<string, { name: string; status: any }>();
+    const leadsMap = new Map<string, { name: string; status: any; voice_call_status?: any; note?: any }>();
 
     try {
         const tables = ["nr_wf", "followup", "nurture", "master_leads"];
         const results = await Promise.all(tables.map(t => 
-            fetch(`${baseUrl}/${t}?select=name,phone,Phone,phoneNumber,phonenumber,customer_number,lead_status`, { headers })
+            fetch(`${baseUrl}/${t}?select=name,phone,Phone,phoneNumber,phonenumber,customer_number,lead_status,voice_call_status,note`, { headers })
                 .then(r => r.json())
                 .catch(() => [])
         ));
@@ -63,12 +63,20 @@ async function fetchLeadsCache() {
                 data.forEach(l => {
                     const phoneRaw = l.phone || l.phoneNumber || l.phonenumber || l.customer_number || "";
                     const clean = cleanPhoneNumber(phoneRaw);
-                    if (clean !== "Unknown" && (l.name || l.lead_status)) {
-                        // Priority: merge if already exists, but master_leads info should take precedence if status exists
+                    if (clean !== "Unknown" && (l.name || l.lead_status || l.voice_call_status)) {
                         const existing = leadsMap.get(clean);
+                        
+                        // Sticky merge logic: prioritize non-empty and non-placeholder values
+                        const newStatus = (l.lead_status && l.lead_status !== "-") ? l.lead_status : existing?.status;
+                        const newVoiceStatus = (l.voice_call_status && l.voice_call_status !== "-") ? l.voice_call_status : existing?.voice_call_status;
+                        const newNote = l.note ? l.note : existing?.note;
+                        const newName = (l.name && l.name !== "Guest" && l.name !== "Unknown") ? l.name : (existing?.name || "Guest");
+
                         leadsMap.set(clean, { 
-                            name: l.name || existing?.name || "Guest", 
-                            status: l.lead_status || existing?.status || null 
+                            name: newName, 
+                            status: newStatus,
+                            voice_call_status: newVoiceStatus,
+                            note: newNote
                         });
                     }
                 });
@@ -249,6 +257,8 @@ export async function GET(req: Request) {
                     if (resolvedFromLead) {
                         vapiName = resolvedFromLead.name || vapiName;
                         (vc as any).leadStatus = resolvedFromLead.status;
+                        (vc as any).voice_call_status = resolvedFromLead.voice_call_status;
+                        (vc as any).leadNote = resolvedFromLead.note;
                     }
 
                     if (vapiName && /^\d+$/.test(vapiName.replace(/\D/g, '')) && vapiName.length > 5) {
@@ -297,6 +307,8 @@ export async function GET(req: Request) {
                         successEvaluation: vc.analysis?.successEvaluation,
                         llmIntent: evalCache.get(vc.id) || null,
                         leadStatus: (vc as any).leadStatus || null,
+                        voice_call_status: (vc as any).voice_call_status || null,
+                        leadNote: (vc as any).leadNote || null,
                         endedReason: vc.endedReason || null,
                         raw: vc
                     };

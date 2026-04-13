@@ -37,19 +37,32 @@ const DynamicRowCells = ({ call, leads }: { call: any, leads: any[] }) => {
         }
     }
 
-    // Sentiment & Status logic
-    let voiceStatus = "-";
-    let voiceNote = "";
-    if (call.phone && leads) {
+    // Purely column based: use voice_call_status or the actual sentiment analysis (llmIntent)
+    let voiceStatus = call.voice_call_status || call.llmIntent || "";
+    let voiceNote = call.note || call.leadNote || "";
+
+    if (!voiceStatus && call.phone && leads) {
         const targetPhone = call.phone.replace(/\D/g, '');
         if (targetPhone && targetPhone.length > 5) {
-            const foundLead = leads.find((l: any) => l.phone && l.phone.replace(/\D/g, '') === targetPhone);
-            if (foundLead) {
-                voiceStatus = foundLead.voice_call_status || "-";
-                voiceNote = foundLead.note || "";
+            // Check ALL matching leads for this number (handling duplicates)
+            const matchingLeads = leads.filter((l: any) => l.phone && l.phone.replace(/\D/g, '') === targetPhone);
+            
+            // 1. Look for any matching record that has a voice_call_status
+            const leadWithStatus = matchingLeads.find(l => l.voice_call_status && l.voice_call_status !== "-");
+            if (leadWithStatus) {
+                voiceStatus = leadWithStatus.voice_call_status;
+            }
+            
+            // 2. Look for any matching record that has a note (if we don't have one yet)
+            if (!voiceNote) {
+                const leadWithNote = matchingLeads.find(l => l.note);
+                if (leadWithNote) voiceNote = leadWithNote.note;
             }
         }
     }
+
+    const hasData = !!voiceStatus;
+    const displayStatus = voiceStatus || "Please hear the voice rec or read transcript unless you get sentiment analysis.";
 
     return (
         <>
@@ -71,8 +84,8 @@ const DynamicRowCells = ({ call, leads }: { call: any, leads: any[] }) => {
                 {voiceNote ? (
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <span className="text-slate-700 font-medium cursor-help underline decoration-dotted decoration-slate-300">
-                                {voiceStatus}
+                            <span className={`font-medium cursor-help underline decoration-dotted decoration-slate-300 ${hasData ? 'text-slate-700' : 'text-slate-400 italic text-[10px]'}`}>
+                                {displayStatus}
                             </span>
                         </TooltipTrigger>
                         <TooltipContent side="top" className="max-w-[250px] bg-slate-900 text-white border-none p-3 shadow-xl">
@@ -80,7 +93,9 @@ const DynamicRowCells = ({ call, leads }: { call: any, leads: any[] }) => {
                         </TooltipContent>
                     </Tooltip>
                 ) : (
-                    <span className="text-slate-400">{voiceStatus}</span>
+                    <span className={`${hasData ? 'text-slate-700 font-medium' : 'text-slate-400 italic text-[10px]'}`}>
+                        {displayStatus}
+                    </span>
                 )}
             </TableCell>
             <TableCell className="text-slate-600 font-medium">{formatDuration(call.durationSeconds)}</TableCell>
@@ -251,6 +266,34 @@ export default function VoiceLogsPage() {
 
         setCalls(sortedCalls);
     }, [allCallsMapped, dateRange, statusFilter, typeFilter, providerFilter, phoneFilter, sortBy]);
+
+    // SILENT FILL: Periodically refresh recent calls that are missing sentiment/status
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const now = new Date();
+            // Check if any call from the last 15 minutes is missing its sentiment/status
+            const hasRecentMissingData = calls.some(c => {
+                const isMissing = !c.voice_call_status && !c.llmIntent;
+                if (!isMissing) return false;
+                
+                const startedAt = c.startedAt ? new Date(c.startedAt) : null;
+                if (!startedAt) return false;
+                
+                const ageMinutes = (now.getTime() - startedAt.getTime()) / (1000 * 60);
+                return ageMinutes >= 0 && ageMinutes < 15; // 15 min window for AI processing
+            });
+
+            if (hasRecentMissingData && !loading && dateRange.from) {
+                const params: Record<string, string> = {
+                    from: dateRange.from.toISOString(),
+                };
+                if (dateRange.to) params.to = dateRange.to.toISOString();
+                refreshCalls(params);
+            }
+        }, 20000); // Check every 20 seconds for a "silent" live update feel
+
+        return () => clearInterval(interval);
+    }, [calls, loading, dateRange, refreshCalls]);
 
     const handleRefresh = () => {
         const fetchRealData = async () => {
