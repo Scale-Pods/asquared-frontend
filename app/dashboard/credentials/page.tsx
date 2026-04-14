@@ -19,6 +19,11 @@ export default function CredentialsPage() {
         return calls.filter((c: any) => c.source === 'vapi').reduce((acc: number, call: any) => acc + (call.breakdown?.agent || 0), 0);
     }, [calls]);
 
+    const telephonyUsed = React.useMemo(() => {
+        if (!calls || !Array.isArray(calls)) return 0;
+        return calls.reduce((acc: number, call: any) => acc + (call.breakdown?.telephony || 0), 0);
+    }, [calls]);
+
 
 
     const [senderEmails, setSenderEmails] = useState<string[]>([]);
@@ -140,11 +145,20 @@ export default function CredentialsPage() {
                                     <p className="text-xs text-slate-500 font-mono italic">Carrier Status: {didlogicBalance?.status === 'active' ? 'Active' : 'Pending'}</p>
                                 </div>
                             </div>
-                            <div className="text-right">
-                                <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">Available Balance</p>
-                                <p className="text-2xl font-black text-rose-600">
-                                    {didlogicBalance?.balance !== undefined ? `$${didlogicBalance.balance.toFixed(2)}` : 'Live Sync Pending'}
-                                </p>
+                            <div className="text-right flex items-center gap-6">
+                                <div className="text-right">
+                                    <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">Total Used</p>
+                                    <p className="text-xl font-black text-rose-600">
+                                        ${telephonyUsed.toFixed(2)}
+                                    </p>
+                                </div>
+                                <div className="w-[1px] h-10 bg-rose-200 hidden sm:block"></div>
+                                <div className="text-right">
+                                    <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">Available Balance</p>
+                                    <p className="text-2xl font-black text-emerald-600">
+                                        {didlogicBalance?.balance !== undefined ? `$${didlogicBalance.balance.toFixed(2)}` : 'Live Sync Pending'}
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     </div>

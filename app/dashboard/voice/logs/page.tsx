@@ -119,9 +119,12 @@ const DynamicRowCells = ({ call, leadsLookup }: { call: any, leadsLookup: Map<st
                                     <span className="font-mono text-slate-700">${(call.breakdown?.agent || 0).toFixed(3)}</span>
                                 </div>
                                 <div className="flex justify-between text-[11px] text-slate-500">
-                                    <span>Didlogic (Carrier):</span>
-                                    <span className="font-mono text-slate-700">${(call.breakdown?.telephony || 0).toFixed(3)}</span>
-                                </div>
+                                     <span>Didlogic (Carrier):</span>
+                                     <div className="flex items-center gap-1">
+                                         <span className="font-mono text-slate-700">${(call.breakdown?.telephony || 0).toFixed(3)}</span>
+                                         {call.breakdown?.isReal && <Badge variant="outline" className="text-[8px] h-3.5 px-1 py-0 bg-emerald-50 text-emerald-600 border-emerald-200">Verified</Badge>}
+                                     </div>
+                                 </div>
                             </div>
                             <div className="border-t pt-2 mt-2 flex justify-between text-xs font-bold text-slate-900">
                                 <span>Total Estimated:</span>

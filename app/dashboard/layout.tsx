@@ -42,7 +42,7 @@ const sidebarItems = [
 ];
 
 function WalletModal({ isOpen, onClose, type, details, calls }: { isOpen: boolean, onClose: () => void, type: 'vapi' | 'didlogic', details?: any, calls?: any[] }) {
-    const { voiceBalance } = useData();
+    const { voiceBalance, didlogicBalance } = useData();
  
     const title = type === 'vapi' ? 'Vapi Wallet' : 'Didlogic Account';
     const icon = type === 'vapi' 
@@ -58,6 +58,11 @@ function WalletModal({ isOpen, onClose, type, details, calls }: { isOpen: boolea
         // Fallback to summing 'agent' costs from logs specifically
         return calls.filter((c: any) => c.source === 'vapi').reduce((acc: number, call: any) => acc + (call.breakdown?.agent || 0), 0);
     }, [calls, voiceBalance]);
+
+    const telephonyUsed = useMemo(() => {
+        if (!calls || !Array.isArray(calls)) return 0;
+        return calls.reduce((acc: number, call: any) => acc + (call.breakdown?.telephony || 0), 0);
+    }, [calls]);
 
     const vapiDetails = voiceBalance?.vapi;
 
@@ -92,7 +97,17 @@ function WalletModal({ isOpen, onClose, type, details, calls }: { isOpen: boolea
                                 <span className="text-4xl font-black text-rose-600">
                                     ACTIVE
                                 </span>
-                                <span className="text-[10px] text-slate-400 mt-2 font-mono uppercase tracking-widest">Didlogic SIP Trunking</span>
+                                <div className="mt-4 flex flex-col gap-1 border-t pt-4">
+                                    <div className="flex justify-between items-center text-xs font-bold">
+                                        <span className="text-slate-400 uppercase tracking-widest">Total Telephony Used</span>
+                                        <span className="text-rose-600">${telephonyUsed.toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-xs font-bold">
+                                        <span className="text-slate-400 uppercase tracking-widest">Remaining Balance</span>
+                                        <span className="text-emerald-600">${didlogicBalance?.balance !== undefined ? didlogicBalance.balance.toFixed(2) : "0.00"}</span>
+                                    </div>
+                                </div>
+                                <span className="text-[10px] text-slate-400 mt-4 font-mono uppercase tracking-widest">Didlogic SIP Trunking</span>
                             </div>
                             <Button className="bg-rose-600 hover:bg-rose-700 text-white gap-2" onClick={() => window.open('https://didlogic.com/portal', '_blank')}>
                                 <ExternalLink className="h-4 w-4" /> Go to Didlogic Portal
@@ -193,6 +208,11 @@ function DashboardContent({
         // Fallback to summing 'agent' costs from logs specifically
         return calls.filter((c: any) => c.source === 'vapi').reduce((acc: number, call: any) => acc + (call.breakdown?.agent || 0), 0);
     }, [calls, voiceBalance]);
+
+    const telephonyUsed = useMemo(() => {
+        if (!calls || !Array.isArray(calls)) return 0;
+        return calls.reduce((acc: number, call: any) => acc + (call.breakdown?.telephony || 0), 0);
+    }, [calls]);
 
 
 
@@ -329,9 +349,9 @@ function DashboardContent({
                                     >
                                         <Smartphone className="h-3.5 w-3.5" />
                                         <div className="flex flex-col items-start leading-[1.1]">
-                                            <span className="text-[9px] font-bold uppercase opacity-70">Didlogic</span>
+                                            <span className="text-[9px] font-bold uppercase opacity-70">Carrier Used</span>
                                             <span className="text-xs font-bold">
-                                                {loadingBalances ? "..." : (didlogicBalance?.balance !== undefined ? `$${didlogicBalance.balance.toFixed(2)}` : "Active")}
+                                                {loadingCalls ? "..." : `$${telephonyUsed.toFixed(2)}`}
                                             </span>
                                         </div>
                                     </Button>

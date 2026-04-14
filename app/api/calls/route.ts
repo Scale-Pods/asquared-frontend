@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { format, subDays } from 'date-fns';
 import RATES_DATA from '../../../context/rates.json';
 
 
@@ -139,20 +140,73 @@ async function fetchVapiPhonesCache(vapiPrivKey: string) {
     return phoneMap;
 }
 
+// --- 3. Didlogic CDR Fetching ---
+async function fetchDidlogicCDR(apiKey: string, fromDate?: Date, toDate?: Date) {
+    if (!apiKey) return [];
+    try {
+        // Date range for CDRs: Didlogic uses YYYY-MM-DD
+        const from = fromDate ? format(fromDate, 'yyyy-MM-dd') : format(subDays(new Date(), 7), 'yyyy-MM-dd');
+        const to = toDate ? format(toDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
+        
+        // Didlogic API base URL is often https://didlogic.com/api/v2
+        const url = `https://didlogic.com/api/v2/cdrs?from=${from}&to=${to}`;
+        const res = await fetch(url, {
+            headers: { 'Authorization': `Basic ${Buffer.from(apiKey + ':').toString('base64')}` }
+        });
+        
+        if (res.ok) {
+            const data = await res.json();
+            // Didlogic CDRs are usually in an array under 'data' or top-level
+            return Array.isArray(data) ? data : (data.data || []);
+        }
+    } catch (err) {
+        console.error("Didlogic CDR fetch error:", err);
+    }
+    return [];
+}
+ 
+// Helper to match a Vapi call to a Didlogic CDR
+function findMatchingCDR(cdrs: any[], vapiCall: any) {
+    if (!cdrs || cdrs.length === 0) return null;
+    
+    const vapiDest = cleanPhoneNumber(vapiCall.customer?.number);
+    const vapiDuration = vapiCall.durationSeconds || 0;
+    const vapiTime = new Date(vapiCall.startedAt).getTime() / 1000;
+    
+    // Fuzzy matching: match by destination number and look for closest timestamp/duration
+    return cdrs.find((cdr: any) => {
+        const cdrDest = cleanPhoneNumber(cdr.destination);
+        if (cdrDest !== vapiDest) return false;
+        
+        // Match duration within 5 seconds tolerance
+        const cdrDuration = parseFloat(cdr.duration) || 0;
+        const durationMatch = Math.abs(cdrDuration - vapiDuration) < 5;
+        
+        // Match timestamp within 60 seconds tolerance (UTC mapping can shift slightly)
+        const cdrTime = new Date(cdr.time || cdr.created_at).getTime() / 1000;
+        const timeMatch = Math.abs(cdrTime - vapiTime) < 60;
+        
+        return durationMatch && timeMatch;
+    });
+}
+
 export async function GET(req: Request) {
     try {
         const vapiPrivKey = process.env.VAPI_PRIVATE_KEY || "";
-        const [leadsCache, vapiPhoneCache, evalCache] = await Promise.all([
-            fetchLeadsCache(),
-            fetchVapiPhonesCache(vapiPrivKey),
-            fetchLlmEvaluationsCache()
-        ]);
-
+        const didlogicApiKey = process.env.DIDLOGIC_API_KEY || "";
+        
         const { searchParams } = new URL(req.url);
         const fromParam = searchParams.get('from');
         const toParam = searchParams.get('to');
         const fromDate = fromParam ? new Date(fromParam) : null;
         const toDate = toParam ? new Date(toParam) : null;
+
+        const [leadsCache, vapiPhoneCache, evalCache, didlogicCdrs] = await Promise.all([
+            fetchLeadsCache(),
+            fetchVapiPhonesCache(vapiPrivKey),
+            fetchLlmEvaluationsCache(),
+            fetchDidlogicCDR(didlogicApiKey, fromDate || undefined, toDate || undefined)
+        ]);
 
 
         // --- 1.5. Vapi Aggregation ---
@@ -240,11 +294,15 @@ export async function GET(req: Request) {
                     }
 
                     // Calculate telephony fallback based on prefix matching
-                    const vapiTelephonyCost = calculateTelephonyCost(safeDuration, phoneRaw, isInbound, vapiAssistantNum);
+                    const fallbackTelephonyCost = calculateTelephonyCost(safeDuration, phoneRaw, isInbound, vapiAssistantNum);
+ 
+                    // Attempt real-time match with Didlogic CDR
+                    const matchedCdr = findMatchingCDR(didlogicCdrs, vc);
+                    const realTelephonyCost = matchedCdr ? parseFloat(matchedCdr.cost || matchedCdr.amount) || fallbackTelephonyCost : fallbackTelephonyCost;
 
                     // Sum both Vapi's reported cost and our calculated telephony cost
                     // Vapi (Platform/AI) + Telephony (Carrier) = Total Unified Cost
-                    const vapiTotalCost = agentCost + vapiTelephonyCost;
+                    const vapiTotalCost = agentCost + realTelephonyCost;
 
                     let vapiName = customer.name || "Guest";
                     if (vapiName === "Guest" || !vapiName || (vapiName && /^\d+$/.test(vapiName.replace(/\D/g, '')) && vapiName.length > 5)) {
@@ -291,7 +349,8 @@ export async function GET(req: Request) {
                         costValue: vapiTotalCost,
                         breakdown: {
                             agent: agentCost,
-                            telephony: vapiTelephonyCost,
+                            telephony: realTelephonyCost,
+                            isReal: !!matchedCdr,
                             total: vapiTotalCost
                         },
                         type: isInbound ? "Inbound" : "Outbound",
