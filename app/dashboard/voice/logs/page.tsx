@@ -4,7 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { RefreshCw, Play, ChevronLeft, ChevronRight, User, Loader2, Download, ExternalLink, Search, Info, Activity, HelpCircle } from "lucide-react";
+import { RefreshCw, Play, ChevronLeft, ChevronRight, User, Loader2, Download, ExternalLink, Search, Info, Activity, HelpCircle, FileSpreadsheet, FileText } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { LMLoader } from "@/components/lm-loader";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -16,6 +16,9 @@ import { format, parseISO, subDays } from "date-fns";
 import { calculateDuration, formatDuration } from "@/lib/utils";
 import { useData } from "@/context/DataContext";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import * as XLSX from 'xlsx';
 
 // Progressive fetch for missing metadata (phone numbers/direction)
 // Static cells that rely on pre-fetched and normalized data from the API
@@ -158,6 +161,8 @@ export default function VoiceLogsPage() {
     const [phoneFilter, setPhoneFilter] = useState("");
     const [sortBy, setSortBy] = useState("newest");
     const [costModalOpen, setCostModalOpen] = useState(false);
+    const [exportDialogOpen, setExportDialogOpen] = useState(false);
+    const [exportFormat, setExportFormat] = useState<"xlsx" | "csv">("xlsx");
 
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
@@ -353,6 +358,65 @@ export default function VoiceLogsPage() {
         setModalOpen(true);
     };
 
+    const handleExport = () => {
+        const exportData = calls.map((c: any) => {
+            let guestName = c.name || "Guest";
+            const guestNum = c.phone || "Unknown";
+            
+            // Resolve lead name if needed (same logic as DynamicRowCells)
+            if ((!guestName || guestName === "Guest" || guestName === "Unknown") && c.phone) {
+                const targetPhone = c.phone.replace(/\D/g, '');
+                const foundLead = leadsLookup.get(targetPhone);
+                if (foundLead && foundLead.name) {
+                    guestName = foundLead.name;
+                }
+            }
+
+            let voiceStatus = c.voice_call_status || "";
+            let voiceNote = c.note || c.leadNote || "";
+
+            if (c.phone) {
+                const targetPhone = c.phone.replace(/\D/g, '');
+                const found = leadsLookup.get(targetPhone);
+                if (found) {
+                    if (!voiceStatus) voiceStatus = found.voice_call_status || "";
+                    if (!voiceNote) voiceNote = found.note || "";
+                }
+            }
+
+            const formatStatus = (s: string) => {
+                if (!s || s === "-") return "";
+                return s.replace(/_/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+            };
+
+            return {
+                "ID": c.id,
+                "Name": guestName,
+                "Phone": guestNum,
+                "Type": c.type || (c.isInbound ? "Inbound" : "Outbound"),
+                "Status": c.status || "Unknown",
+                "Sentiment/Status": formatStatus(voiceStatus) || "N/A",
+                "Note": voiceNote || "N/A",
+                "Duration": formatDuration(c.durationSeconds || 0),
+                "Country": c.country || "Unknown",
+                "Cost": c.cost || "$0.00",
+                "Date & Time": c.displayDate || "N/A",
+                "Source": c.source || "Unknown"
+            };
+        });
+
+        const worksheet = XLSX.utils.json_to_sheet(exportData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Call Logs");
+
+        if (exportFormat === "xlsx") {
+            XLSX.writeFile(workbook, `call_logs_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+        } else {
+            XLSX.writeFile(workbook, `call_logs_${format(new Date(), 'yyyy-MM-dd')}.csv`, { bookType: 'csv' });
+        }
+        setExportDialogOpen(false);
+    };
+
     const paginatedCalls = calls.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
     return (
@@ -372,6 +436,98 @@ export default function VoiceLogsPage() {
                             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
                             Refresh
                         </Button>
+                        
+                        <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
+                            <DialogTrigger asChild>
+                                <Button className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                                    <Download className="h-4 w-4 mr-2" />
+                                    Export
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent className="sm:max-w-[450px]">
+                                <DialogHeader>
+                                    <DialogTitle className="flex items-center gap-2">
+                                        <Download className="h-5 w-5 text-emerald-600" />
+                                        Export Call Logs
+                                    </DialogTitle>
+                                    <DialogDescription>
+                                        Export {calls.length} logs based on your current filters.
+                                    </DialogDescription>
+                                </DialogHeader>
+                                
+                                <div className="grid gap-6 py-4">
+                                    <div className="space-y-3 p-4 bg-slate-50 rounded-lg border border-slate-100">
+                                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">Applied Filters</h4>
+                                        <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-sm">
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] text-slate-400 font-medium">Date Range</span>
+                                                <span className="truncate">{dateRange?.from ? `${format(dateRange.from, 'MMM d')} - ${format(dateRange.to || dateRange.from, 'MMM d')}` : 'All Time'}</span>
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] text-slate-400 font-medium">Type</span>
+                                                <span className="capitalize">{typeFilter}</span>
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] text-slate-400 font-medium">Status</span>
+                                                <span className="capitalize">{sentimentFilter}</span>
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] text-slate-400 font-medium">Search</span>
+                                                <span className="truncate">{phoneFilter || 'None'}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        <Label className="text-slate-700 font-bold">Export Format</Label>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div 
+                                                className={`cursor-pointer flex items-center justify-between p-4 rounded-xl border-2 transition-all ${exportFormat === 'xlsx' ? 'border-emerald-500 bg-emerald-50/50' : 'border-slate-100 hover:border-slate-200 bg-white'}`}
+                                                onClick={() => setExportFormat('xlsx')}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`p-2 rounded-lg ${exportFormat === 'xlsx' ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                                        <FileSpreadsheet className="h-5 w-5" />
+                                                    </div>
+                                                    <div>
+                                                        <p className={`font-bold text-sm ${exportFormat === 'xlsx' ? 'text-emerald-900' : 'text-slate-700'}`}>Excel</p>
+                                                        <p className="text-[10px] text-slate-500">.xlsx format</p>
+                                                    </div>
+                                                </div>
+                                                <div className={`h-4 w-4 rounded-full border-2 flex items-center justify-center ${exportFormat === 'xlsx' ? 'border-emerald-500' : 'border-slate-300'}`}>
+                                                    {exportFormat === 'xlsx' && <div className="h-2 w-2 rounded-full bg-emerald-500" />}
+                                                </div>
+                                            </div>
+
+                                            <div 
+                                                className={`cursor-pointer flex items-center justify-between p-4 rounded-xl border-2 transition-all ${exportFormat === 'csv' ? 'border-blue-500 bg-blue-50/50' : 'border-slate-100 hover:border-slate-200 bg-white'}`}
+                                                onClick={() => setExportFormat('csv')}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`p-2 rounded-lg ${exportFormat === 'csv' ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                                        <FileText className="h-5 w-5" />
+                                                    </div>
+                                                    <div>
+                                                        <p className={`font-bold text-sm ${exportFormat === 'csv' ? 'text-blue-900' : 'text-slate-700'}`}>CSV</p>
+                                                        <p className="text-[10px] text-slate-500">.csv format</p>
+                                                    </div>
+                                                </div>
+                                                <div className={`h-4 w-4 rounded-full border-2 flex items-center justify-center ${exportFormat === 'csv' ? 'border-blue-500' : 'border-slate-300'}`}>
+                                                    {exportFormat === 'csv' && <div className="h-2 w-2 rounded-full bg-blue-500" />}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <DialogFooter>
+                                    <Button variant="outline" onClick={() => setExportDialogOpen(false)}>Cancel</Button>
+                                    <Button className="bg-slate-900 text-white hover:bg-slate-800" onClick={handleExport}>
+                                        Download {exportFormat.toUpperCase()}
+                                    </Button>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
                     </div>
                 </div>
 
